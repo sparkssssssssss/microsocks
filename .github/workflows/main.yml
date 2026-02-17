@@ -1,50 +1,40 @@
-name: Build microsocks for MT7621 (static)
+name: Build Microsocks (Apt GCC Method)
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - "v*"
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Checkout workspace
+      uses: actions/checkout@v4
 
-      - name: Install tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y wget xz-utils file
+    - name: Install GCC for MIPS
+      run: |
+        # 直接从 Ubuntu 官方源安装，速度极快
+        sudo apt-get update
+        sudo apt-get install -y gcc-mipsel-linux-gnu
 
-      - name: Download musl cross toolchain (mipsel)
-        run: |
-          wget -q https://musl.cc/mipsel-linux-musl-cross.tgz
-          tar -xzf mipsel-linux-musl-cross.tgz
-          echo "${GITHUB_WORKSPACE}/mipsel-linux-musl-cross/bin" >> $GITHUB_PATH
+    - name: Clone Microsocks
+      run: git clone https://github.com/rofl0r/microsocks.git
 
-      - name: Build static binary for MT7621
-        run: |
-          mipsel-linux-musl-gcc -v
-          make clean || true
-          make \
-            CC=mipsel-linux-musl-gcc \
-            CFLAGS="-Os -pipe -static -s -march=mips32r2 -mtune=1004kc -msoft-float" \
-            LDFLAGS="-static"
+    - name: Compile
+      run: |
+        cd microsocks
+        
+        # 使用系统安装的交叉编译器
+        # 注意：这里虽然工具链叫 linux-gnu，但加上 -static 后不依赖动态库，
+        # 可以在 OpenWrt (musl) 上运行。
+        
+        make CC="mipsel-linux-gnu-gcc -static -O3" \
+             LDFLAGS="-static -s"
 
-          file microsocks
-          # 再次确保 strip（有些 Makefile 已经做过）
-          mipsel-linux-musl-strip microsocks || true
+        mv microsocks ../microsocks-mt7621-static
 
-      - name: Rename artifact
-        run: |
-          mkdir -p out
-          cp microsocks out/microsocks-mt7621-mipsel-static
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: microsocks-mt7621-mipsel-static
-          path: out/microsocks-mt7621-mipsel-static
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: microsocks-mt7621-static
+        path: microsocks-mt7621-static
